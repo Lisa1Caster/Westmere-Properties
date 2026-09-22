@@ -1,0 +1,7 @@
+{
+  "name": "Westmere Properties | Real Estate Manchester",
+  "description": "Premium real estate agency based at Wilson Business Park, Manchester. Expert residential and commercial property sales, lettings, and acquisitions.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
