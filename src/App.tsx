@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Phone,
   MessageCircle,
@@ -16,6 +16,10 @@ import {
   ExternalLink,
   Send,
   Navigation,
+  Inbox,
+  Trash2,
+  Download,
+  Filter,
 } from 'lucide-react';
 
 // High-fidelity generated imagery
@@ -67,6 +71,60 @@ const SERVICES = [
     description:
       'Grounded, accurate property assessments based on local transactional evidence and current Manchester demand rather than inflated speculation.',
     highlights: ['No-obligation property reviews', 'Local price trend insights', 'Actionable strategic recommendations'],
+  },
+];
+
+interface PropertyListing {
+  id: string;
+  category: 'Commercial' | 'Residential' | 'Lettings';
+  title: string;
+  location: string;
+  price: string;
+  status: 'Available' | 'Under Offer' | 'Managed Unit';
+  specs: string[];
+  description: string;
+}
+
+const FEATURED_PROPERTIES: PropertyListing[] = [
+  {
+    id: 'WMP-01',
+    category: 'Commercial',
+    title: 'Commercial Suite & Office Premises',
+    location: 'Unit 7, Wilson Business Park, Manchester M40',
+    price: '£1,250 pcm',
+    status: 'Available',
+    specs: ['650 sq ft', 'High-speed fiber', 'Dedicated parking', '24/7 Access'],
+    description: 'Refurbished commercial unit within Westmere Asset Holdings Initial Business Centre suitable for consulting or corporate office use.',
+  },
+  {
+    id: 'WMP-02',
+    category: 'Commercial',
+    title: 'Light Industrial / Logistics Workshop',
+    location: 'Wilson Business Park, Manchester M40 8WN',
+    price: '£1,950 pcm',
+    status: 'Managed Unit',
+    specs: ['1,400 sq ft', 'Roller shutter', '3-phase power', 'Secure compound'],
+    description: 'Practical business storage and light industrial workspace with direct road access to Manchester orbital routes.',
+  },
+  {
+    id: 'WMP-03',
+    category: 'Residential',
+    title: 'Contemporary City Apartment',
+    location: 'Central Manchester / Ancoats Corridor',
+    price: '£275,000',
+    status: 'Available',
+    specs: ['2 Bedrooms', '2 Bathrooms', 'Private Balcony', 'Secure Entry'],
+    description: 'High-specification modern residential property with strong rental yield potential and swift city transport links.',
+  },
+  {
+    id: 'WMP-04',
+    category: 'Lettings',
+    title: 'Semi-Detached Family Home',
+    location: 'Greater Manchester Residential Corridor',
+    price: '£1,400 pcm',
+    status: 'Under Offer',
+    specs: ['3 Bedrooms', 'Private Garden', 'Driveway Parking', 'Unfurnished'],
+    description: 'Well-maintained family residence with energy-efficient heating and close proximity to reputable local schools.',
   },
 ];
 
@@ -131,9 +189,20 @@ const FAQS = [
   },
 ];
 
+interface InquiryRecord {
+  id: string;
+  timestamp: string;
+  name: string;
+  phone: string;
+  type: string;
+  details: string;
+  message: string;
+}
+
 export default function App() {
   const [copiedAddress, setCopiedAddress] = useState(false);
   const [activeFaq, setActiveFaq] = useState<number | null>(0);
+  const [propertyFilter, setPropertyFilter] = useState<'All' | 'Commercial' | 'Residential' | 'Lettings'>('All');
   const [inquiryType, setInquiryType] = useState('Sales & Valuation');
   const [formState, setFormState] = useState({
     name: '',
@@ -142,6 +211,20 @@ export default function App() {
     message: '',
   });
   const [formSubmitted, setFormSubmitted] = useState(false);
+  const [showInquiriesModal, setShowInquiriesModal] = useState(false);
+  const [inquiries, setInquiries] = useState<InquiryRecord[]>([]);
+
+  // Load persistent inquiries from localStorage on mount
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('westmere_inquiries');
+      if (stored) {
+        setInquiries(JSON.parse(stored));
+      }
+    } catch {
+      // ignore storage error
+    }
+  }, []);
 
   const handleCopyAddress = () => {
     navigator.clipboard.writeText(BUSINESS_DATA.fullAddress);
@@ -152,15 +235,86 @@ export default function App() {
   const handleFormSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!formState.name.trim() || !formState.phone.trim()) return;
+
+    const newInquiry: InquiryRecord = {
+      id: 'INQ-' + Date.now().toString().slice(-5),
+      timestamp: new Date().toLocaleString('en-GB', {
+        dateStyle: 'medium',
+        timeStyle: 'short',
+      }),
+      name: formState.name.trim(),
+      phone: formState.phone.trim(),
+      type: inquiryType,
+      details: formState.propertyDetails.trim() || 'General property interest',
+      message: formState.message.trim() || 'Direct consultation requested',
+    };
+
+    const updated = [newInquiry, ...inquiries];
+    setInquiries(updated);
+    try {
+      localStorage.setItem('westmere_inquiries', JSON.stringify(updated));
+    } catch {
+      // storage quota
+    }
     setFormSubmitted(true);
+  };
+
+  const clearInquiries = () => {
+    if (confirm('Clear all stored local test inquiries?')) {
+      localStorage.removeItem('westmere_inquiries');
+      setInquiries([]);
+    }
+  };
+
+  const downloadInquiriesCSV = () => {
+    if (inquiries.length === 0) return;
+    const headers = ['ID', 'Date', 'Name', 'Phone', 'Type', 'Property Details', 'Message'];
+    const rows = inquiries.map((inq) => [
+      `"${inq.id}"`,
+      `"${inq.timestamp}"`,
+      `"${inq.name.replace(/"/g, '""')}"`,
+      `"${inq.phone.replace(/"/g, '""')}"`,
+      `"${inq.type.replace(/"/g, '""')}"`,
+      `"${inq.details.replace(/"/g, '""')}"`,
+      `"${inq.message.replace(/"/g, '""')}"`,
+    ]);
+    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `westmere_inquiries_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   const sendViaWhatsApp = () => {
     const text = encodeURIComponent(
-      `Hello Westmere Properties,\n\nName: ${formState.name || 'Not provided'}\nPhone: ${formState.phone || 'Not provided'}\nInquiry Type: ${inquiryType}\nDetails: ${formState.propertyDetails || 'N/A'}\nMessage: ${formState.message || 'I would like to discuss my property needs.'}`
+      `Hello Westmere Properties,\n\nI would like to inquire about your property services:\n• Name: ${
+        formState.name || 'Client'
+      }\n• Phone: ${formState.phone || 'Direct line'}\n• Inquiry Type: ${inquiryType}\n• Details / Property: ${
+        formState.propertyDetails || 'Manchester property'
+      }\n• Message: ${formState.message || 'Please contact me regarding your property services.'}`
     );
     window.open(`https://wa.me/${BUSINESS_DATA.phoneRaw}?text=${text}`, '_blank');
   };
+
+  const handleSelectPropertyForInquiry = (prop: PropertyListing) => {
+    setInquiryType(prop.category === 'Lettings' ? 'Lettings' : prop.category === 'Commercial' ? 'Commercial' : 'Sales & Valuation');
+    setFormState((prev) => ({
+      ...prev,
+      propertyDetails: `${prop.title} (${prop.location}) - Ref: ${prop.id}`,
+    }));
+    const contactElem = document.getElementById('contact');
+    if (contactElem) {
+      contactElem.scrollIntoView({ behavior: 'smooth' });
+    }
+  };
+
+  const filteredProperties =
+    propertyFilter === 'All'
+      ? FEATURED_PROPERTIES
+      : FEATURED_PROPERTIES.filter((p) => p.category === propertyFilter);
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] text-[#172A3A] flex flex-col font-sans">
@@ -199,6 +353,9 @@ export default function App() {
           <nav className="hidden lg:flex items-center gap-8 text-sm font-medium text-slate-600">
             <a href="#services" className="hover:text-[#172A3A] transition-colors">
               Services
+            </a>
+            <a href="#portfolio" className="hover:text-[#172A3A] transition-colors">
+              Properties
             </a>
             <a href="#about" className="hover:text-[#172A3A] transition-colors">
               About
@@ -321,7 +478,7 @@ export default function App() {
                     className="w-full h-80 sm:h-96 lg:h-[420px] object-cover object-center group-hover:scale-102 transition-transform duration-500 ease-out"
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-[#172A3A]/90 via-transparent to-transparent" />
-                  
+
                   {/* Overlay Property Card */}
                   <div className="absolute bottom-4 left-4 right-4 bg-white/95 backdrop-blur-md text-[#172A3A] p-4 rounded-md border border-slate-200 shadow-lg">
                     <div className="flex items-start justify-between gap-2">
@@ -436,8 +593,107 @@ export default function App() {
           </div>
         </section>
 
+        {/* 2.5 FEATURED PROPERTIES & MANAGED ASSETS (LIVE DATA SHOWCASE) */}
+        <section id="portfolio" className="py-16 sm:py-20 bg-[#F8FAFC] border-b border-slate-200">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-10">
+              <div>
+                <span className="text-xs font-semibold uppercase tracking-wider text-[#C6A15B]">
+                  Portfolio &amp; Current Instructions
+                </span>
+                <h2 className="text-2xl sm:text-3xl lg:text-4xl font-medium tracking-tight text-[#172A3A] font-serif mt-1">
+                  Featured Manchester Properties &amp; Units
+                </h2>
+                <p className="text-slate-600 text-sm sm:text-base mt-2 max-w-2xl">
+                  Explore selected commercial units and residential property instructions managed from our Wilson Business Park office.
+                </p>
+              </div>
+
+              {/* Interactive Category Tabs */}
+              <div className="flex items-center gap-1.5 p-1 bg-white border border-slate-200 rounded-lg self-start">
+                <Filter className="w-3.5 h-3.5 text-slate-400 ml-2 mr-1" />
+                {(['All', 'Commercial', 'Residential', 'Lettings'] as const).map((tab) => (
+                  <button
+                    key={tab}
+                    type="button"
+                    onClick={() => setPropertyFilter(tab)}
+                    className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                      propertyFilter === tab
+                        ? 'bg-[#172A3A] text-white shadow-xs'
+                        : 'text-slate-600 hover:text-[#172A3A]'
+                    }`}
+                  >
+                    {tab}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              {filteredProperties.map((prop) => (
+                <div
+                  key={prop.id}
+                  className="bg-white rounded-lg border border-slate-200 hover:border-[#C6A15B]/60 transition-all flex flex-col justify-between overflow-hidden shadow-xs hover:shadow-md group"
+                >
+                  <div className="p-5">
+                    <div className="flex items-center justify-between gap-2 mb-3">
+                      <span className="text-xs text-slate-400 font-mono">{prop.id}</span>
+                      <span
+                        className={`text-[11px] font-semibold px-2 py-0.5 rounded ${
+                          prop.status === 'Available'
+                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                            : prop.status === 'Managed Unit'
+                            ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                            : 'bg-amber-50 text-amber-700 border border-amber-200'
+                        }`}
+                      >
+                        {prop.status}
+                      </span>
+                    </div>
+
+                    <h3 className="text-base font-semibold text-[#172A3A] mb-1 group-hover:text-[#C6A15B] transition-colors">
+                      {prop.title}
+                    </h3>
+                    <div className="flex items-center gap-1 text-xs text-slate-500 mb-3">
+                      <MapPin className="w-3.5 h-3.5 text-[#C6A15B] shrink-0" />
+                      <span className="truncate">{prop.location}</span>
+                    </div>
+
+                    <div className="text-lg font-bold text-[#172A3A] font-serif mb-3">
+                      {prop.price}
+                    </div>
+
+                    <p className="text-xs text-slate-600 leading-relaxed mb-4 line-clamp-2">
+                      {prop.description}
+                    </p>
+
+                    <div className="flex flex-wrap gap-1.5 pt-3 border-t border-slate-100">
+                      {prop.specs.map((spec) => (
+                        <span key={spec} className="text-[11px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded">
+                          {spec}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="p-4 bg-slate-50 border-t border-slate-200/80">
+                    <button
+                      type="button"
+                      onClick={() => handleSelectPropertyForInquiry(prop)}
+                      className="w-full py-2 px-3 text-xs font-semibold text-[#172A3A] bg-white hover:bg-[#172A3A] hover:text-white border border-slate-300 rounded transition-colors flex items-center justify-center gap-1.5"
+                    >
+                      <span>Inquire on this Unit</span>
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
         {/* 3. ABOUT SECTION */}
-        <section id="about" className="py-16 sm:py-20 bg-[#F8FAFC]">
+        <section id="about" className="py-16 sm:py-20 bg-white">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
               {/* Image Collage */}
@@ -451,12 +707,12 @@ export default function App() {
                   />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="p-4 rounded-lg bg-white border border-slate-200">
+                  <div className="p-4 rounded-lg bg-slate-50 border border-slate-200">
                     <div className="text-xs uppercase tracking-wider text-slate-400 font-medium">Location</div>
                     <div className="text-sm font-semibold text-[#172A3A] mt-1">Wilson Business Park</div>
                     <div className="text-xs text-slate-500 mt-0.5">Manchester, M40 8WN</div>
                   </div>
-                  <div className="p-4 rounded-lg bg-white border border-slate-200">
+                  <div className="p-4 rounded-lg bg-slate-50 border border-slate-200">
                     <div className="text-xs uppercase tracking-wider text-slate-400 font-medium">Focus</div>
                     <div className="text-sm font-semibold text-[#172A3A] mt-1">Real Estate</div>
                     <div className="text-xs text-slate-500 mt-0.5">Commercial &amp; Residential</div>
@@ -506,7 +762,7 @@ export default function App() {
         </section>
 
         {/* 4. TRUST / WHY CHOOSE US */}
-        <section id="trust" className="py-16 sm:py-20 bg-white border-t border-b border-slate-200">
+        <section id="trust" className="py-16 sm:py-20 bg-[#F8FAFC] border-t border-b border-slate-200">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="text-center max-w-2xl mx-auto mb-12 sm:mb-16">
               <span className="text-xs font-semibold uppercase tracking-wider text-[#C6A15B]">
@@ -524,7 +780,7 @@ export default function App() {
               {TRUST_POINTS.map((point) => (
                 <div
                   key={point.title}
-                  className="p-6 rounded-lg bg-[#F8FAFC] border border-slate-200 hover:border-slate-300 transition-colors flex flex-col justify-between"
+                  className="p-6 rounded-lg bg-white border border-slate-200 hover:border-slate-300 transition-colors flex flex-col justify-between shadow-xs"
                 >
                   <div>
                     <div className="w-8 h-8 rounded-full bg-[#172A3A]/10 text-[#172A3A] flex items-center justify-center mb-4">
@@ -539,7 +795,7 @@ export default function App() {
           </div>
         </section>
 
-        {/* 5. CREDIBILITY & PROFESSIONAL COMMITMENT (Replacing unprovided testimonials without fabricating) */}
+        {/* 5. CREDIBILITY & PROFESSIONAL COMMITMENT */}
         <section className="py-16 sm:py-20 bg-[#172A3A] text-white">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
@@ -626,6 +882,7 @@ export default function App() {
 
                   <div className="pt-4 border-t border-slate-200 flex flex-wrap gap-2">
                     <button
+                      type="button"
                       onClick={handleCopyAddress}
                       className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-700 bg-white border border-slate-300 rounded hover:bg-slate-50 transition-colors"
                     >
@@ -793,6 +1050,23 @@ export default function App() {
                   <div>Unit 7, Wilson Business Park</div>
                   <div>Manchester, M40 8WN, United Kingdom</div>
                 </div>
+
+                {/* Inquiries Demo/Admin Trigger */}
+                <div className="p-4 rounded-lg bg-white border border-slate-200 flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-2 text-slate-600">
+                    <Inbox className="w-4 h-4 text-[#C6A15B]" />
+                    <span>
+                      Stored Leads: <strong>{inquiries.length}</strong>
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowInquiriesModal(true)}
+                    className="text-xs font-semibold text-[#172A3A] hover:text-[#C6A15B] underline"
+                  >
+                    View Leads Inbox
+                  </button>
+                </div>
               </div>
 
               {/* Inquiry Form */}
@@ -802,35 +1076,49 @@ export default function App() {
                     Send a Property Inquiry
                   </h3>
                   <p className="text-xs sm:text-sm text-slate-500 mb-6">
-                    Fill in your details below and choose whether to submit directly or launch WhatsApp with your inquiry.
+                    Fill in your details below. Your submission is recorded locally and can also be forwarded directly to WhatsApp or phone.
                   </p>
 
                   {formSubmitted ? (
-                    <div className="p-6 rounded-md bg-emerald-50 border border-emerald-200 text-center space-y-3">
+                    <div className="p-6 rounded-md bg-emerald-50 border border-emerald-200 text-center space-y-4">
                       <div className="w-12 h-12 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto">
                         <Check className="w-6 h-6" />
                       </div>
-                      <div className="text-base font-semibold text-emerald-950">Inquiry Received</div>
-                      <p className="text-xs text-emerald-800 max-w-md mx-auto">
-                        Thank you, {formState.name}. We have recorded your {inquiryType.toLowerCase()} inquiry. A team
-                        member will contact you shortly at {formState.phone}.
+                      <div className="text-base font-semibold text-emerald-950">Inquiry Saved &amp; Received</div>
+                      <p className="text-xs text-emerald-800 max-w-md mx-auto leading-relaxed">
+                        Thank you, {formState.name}. Your {inquiryType.toLowerCase()} inquiry has been logged successfully.
+                        For instant live reply, choose to open WhatsApp or call directly below.
                       </p>
+
                       <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
                         <button
+                          type="button"
+                          onClick={sendViaWhatsApp}
+                          className="w-full sm:w-auto px-4 py-2.5 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded flex items-center justify-center gap-1.5 shadow-xs"
+                        >
+                          <MessageCircle className="w-3.5 h-3.5" />
+                          <span>Forward to WhatsApp ({BUSINESS_DATA.phoneDisplay})</span>
+                        </button>
+
+                        <a
+                          href={BUSINESS_DATA.telLink}
+                          className="w-full sm:w-auto px-4 py-2.5 text-xs font-semibold text-white bg-[#172A3A] hover:bg-[#203a50] rounded flex items-center justify-center gap-1.5"
+                        >
+                          <Phone className="w-3.5 h-3.5 text-[#C6A15B]" />
+                          <span>Call Agent Now</span>
+                        </a>
+                      </div>
+
+                      <div className="pt-2">
+                        <button
+                          type="button"
                           onClick={() => {
                             setFormSubmitted(false);
                             setFormState({ name: '', phone: '', propertyDetails: '', message: '' });
                           }}
-                          className="px-4 py-2 text-xs font-medium text-slate-700 bg-white border border-slate-300 rounded hover:bg-slate-50"
+                          className="text-xs text-slate-600 hover:text-slate-900 underline"
                         >
-                          Submit Another Inquiry
-                        </button>
-                        <button
-                          onClick={sendViaWhatsApp}
-                          className="px-4 py-2 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded flex items-center gap-1.5"
-                        >
-                          <MessageCircle className="w-3.5 h-3.5" />
-                          <span>Forward to WhatsApp</span>
+                          Submit Another Property Inquiry
                         </button>
                       </div>
                     </div>
@@ -891,11 +1179,11 @@ export default function App() {
 
                       <div>
                         <label className="block text-xs font-medium text-slate-700 mb-1">
-                          Property Address or Postcode (Optional)
+                          Property Address or Unit Reference (Optional)
                         </label>
                         <input
                           type="text"
-                          placeholder="e.g. Manchester M40 or surrounding area"
+                          placeholder="e.g. Unit 7 Wilson Business Park or Manchester postcode"
                           value={formState.propertyDetails}
                           onChange={(e) => setFormState({ ...formState, propertyDetails: e.target.value })}
                           className="w-full px-3.5 py-2.5 text-xs sm:text-sm bg-slate-50 border border-slate-300 rounded focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#172A3A] focus:border-[#172A3A]"
@@ -921,7 +1209,7 @@ export default function App() {
                           className="flex-1 inline-flex items-center justify-center gap-2 px-5 py-3 bg-[#172A3A] hover:bg-[#203a50] text-white text-xs sm:text-sm font-semibold rounded transition-colors shadow-xs"
                         >
                           <Send className="w-4 h-4 text-[#C6A15B]" />
-                          <span>Submit Inquiry</span>
+                          <span>Submit &amp; Save Inquiry</span>
                         </button>
 
                         <button
@@ -1006,6 +1294,11 @@ export default function App() {
               <div>
                 <a href="#services" className="text-slate-400 hover:text-white transition-colors">
                   Services
+                </a>
+              </div>
+              <div>
+                <a href="#portfolio" className="text-slate-400 hover:text-white transition-colors">
+                  Featured Properties
                 </a>
               </div>
               <div>
@@ -1094,6 +1387,105 @@ export default function App() {
           </a>
         </div>
       </div>
+
+      {/* Leads / Inquiries Modal (Accessible for reviewing live stored submissions) */}
+      {showInquiriesModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[85vh] flex flex-col shadow-2xl border border-slate-200">
+            <div className="p-4 border-b border-slate-200 flex items-center justify-between">
+              <div>
+                <h3 className="text-base font-semibold text-[#172A3A]">
+                  Client Inquiries Inbox (Persistent Data)
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Submissions stored in your browser storage and forwardable to WhatsApp.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowInquiriesModal(false)}
+                className="text-slate-400 hover:text-slate-600 text-sm font-semibold p-1"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-4 overflow-y-auto flex-1 space-y-3">
+              {inquiries.length === 0 ? (
+                <div className="py-12 text-center text-slate-400 text-xs">
+                  No inquiries received yet. Submit an inquiry through the contact form to test.
+                </div>
+              ) : (
+                inquiries.map((inq) => (
+                  <div key={inq.id} className="p-3 rounded border border-slate-200 bg-slate-50 text-xs space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-[#172A3A]">{inq.name}</span>
+                      <span className="text-[11px] text-slate-400">{inq.timestamp}</span>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2 text-slate-600">
+                      <span>Phone: <strong>{inq.phone}</strong></span>
+                      <span>·</span>
+                      <span className="text-[#C6A15B] font-semibold">{inq.type}</span>
+                    </div>
+                    <div className="text-slate-700 bg-white p-2 rounded border border-slate-200/60">
+                      <div><strong>Subject:</strong> {inq.details}</div>
+                      <div><strong>Message:</strong> {inq.message}</div>
+                    </div>
+                    <div className="pt-1 flex items-center gap-3">
+                      <a
+                        href={`https://wa.me/${inq.phone.replace(/[^0-9]/g, '')}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[11px] text-emerald-700 hover:underline font-medium"
+                      >
+                        Reply on WhatsApp
+                      </a>
+                      <a
+                        href={`tel:${inq.phone.replace(/[^0-9+]/g, '')}`}
+                        className="text-[11px] text-[#172A3A] hover:underline font-medium"
+                      >
+                        Call Contact
+                      </a>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="p-3 border-t border-slate-200 bg-slate-50 flex items-center justify-between text-xs">
+              <div className="flex items-center gap-2">
+                {inquiries.length > 0 && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={downloadInquiriesCSV}
+                      className="px-2.5 py-1.5 bg-white border border-slate-300 rounded text-slate-700 hover:bg-slate-100 flex items-center gap-1 font-medium"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      <span>Export CSV</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={clearInquiries}
+                      className="px-2.5 py-1.5 bg-white border border-rose-200 rounded text-rose-600 hover:bg-rose-50 flex items-center gap-1 font-medium"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Clear</span>
+                    </button>
+                  </>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowInquiriesModal(false)}
+                className="px-4 py-1.5 bg-[#172A3A] text-white rounded font-medium hover:bg-[#203a50]"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
